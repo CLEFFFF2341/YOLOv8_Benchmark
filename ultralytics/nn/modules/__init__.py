@@ -74,6 +74,7 @@ from .conv import (
     Index,
     LightConv,
     RepConv,
+    SE,
     SpatialAttention,
 )
 from .head import (
@@ -171,6 +172,7 @@ __all__ = (
     "RTDETRDecoder",
     "RepC3",
     "RepConv",
+    "SE",
     "RepNCSPELAN4",
     "RepVGGDW",
     "ResNetLayer",

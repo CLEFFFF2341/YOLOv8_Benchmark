@@ -23,6 +23,7 @@ __all__ = (
     "Index",
     "LightConv",
     "RepConv",
+    "SE",
     "SpatialAttention",
 )
 
@@ -611,6 +612,31 @@ class CBAM(nn.Module):
             (torch.Tensor): Attended output tensor.
         """
         return self.spatial_attention(self.channel_attention(x))
+
+
+class SE(nn.Module):
+    """Squeeze-and-Excitation attention module."""
+
+    def __init__(self, c1: int, reduction: int = 16):
+        """Initialize SE attention.
+
+        Args:
+            c1 (int): Number of input channels.
+            reduction (int): Channel reduction ratio for the excitation bottleneck.
+        """
+        super().__init__()
+        c_ = max(8, c1 // reduction)
+        self.pool = nn.AdaptiveAvgPool2d(1)
+        self.fc = nn.Sequential(
+            nn.Conv2d(c1, c_, 1, bias=True),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(c_, c1, 1, bias=True),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply channel-wise SE attention to input features."""
+        return x * self.fc(self.pool(x))
 
 
 class Concat(nn.Module):
