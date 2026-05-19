@@ -23,6 +23,7 @@ __all__ = (
     "Index",
     "LightConv",
     "RepConv",
+    "SG_LCA",
     "SpatialAttention",
 )
 
@@ -611,6 +612,51 @@ class CBAM(nn.Module):
             (torch.Tensor): Attended output tensor.
         """
         return self.spatial_attention(self.channel_attention(x))
+
+
+class SG_LCA(nn.Module):
+    """Spatial-Gated Local Coordinate Attention for detail-sensitive feature recalibration."""
+
+    def __init__(self, c1: int, c2: int | None = None, reduction: int = 32):
+        """Initialize SG-LCA.
+
+        Args:
+            c1 (int): Number of input channels.
+            c2 (int | None): Number of output channels. Defaults to c1.
+            reduction (int): Channel reduction ratio for coordinate attention.
+        """
+        super().__init__()
+        c2 = c1 if c2 is None else c2
+        mip = max(8, c2 // reduction)
+        self.align = Conv(c1, c2, 1, 1) if c1 != c2 else nn.Identity()
+        self.local = Conv(c2, c2, 3, 1, g=c2)
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+        self.coord_reduce = Conv(c2, mip, 1, 1)
+        self.conv_h = nn.Conv2d(mip, c2, 1, 1, 0)
+        self.conv_w = nn.Conv2d(mip, c2, 1, 1, 0)
+        self.conv_spatial = nn.Conv2d(2, 1, 3, 1, 1, bias=False)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply local, coordinate, and spatial gated attention."""
+        x = self.align(x)
+        _, _, h, w = x.shape
+
+        f = x + self.local(x)
+
+        f_h = self.pool_h(f)
+        f_w = self.pool_w(f).permute(0, 1, 3, 2)
+        coord = self.coord_reduce(torch.cat([f_h, f_w], dim=2))
+        f_h, f_w = torch.split(coord, [h, w], dim=2)
+
+        a_h = self.conv_h(f_h).sigmoid()
+        a_w = self.conv_w(f_w).permute(0, 1, 3, 2).sigmoid()
+
+        avg_out = torch.mean(f, dim=1, keepdim=True)
+        max_out = torch.max(f, dim=1, keepdim=True)[0]
+        a_s = self.conv_spatial(torch.cat([avg_out, max_out], dim=1)).sigmoid()
+
+        return x * a_h * a_w * a_s + x
 
 
 class Concat(nn.Module):

@@ -64,6 +64,7 @@ from ultralytics.nn.modules import (
     ResNetLayer,
     RTDETRDecoder,
     SCDown,
+    SG_LCA,
     Segment,
     Segment26,
     TorchVision,
@@ -1694,6 +1695,12 @@ def parse_model(d, ch, verbose=True):
             if m is HGBlock:
                 args.insert(4, n)  # number of repeats
                 n = 1
+        elif m is SG_LCA:
+            c1 = ch[f]
+            c2 = args[0] if args else c1
+            if c2 != c1:
+                c2 = make_divisible(min(c2, max_channels) * width, 8)
+            args = [c1, c2, *args[1:]]
         elif m is ResNetLayer:
             c2 = args[1] if args[3] else args[1] * 4
         elif m is torch.nn.BatchNorm2d:

@@ -852,6 +852,10 @@ class BaseTrainer:
             self.validator.args.compile = False  # disable final val compile as too slow
             self.metrics = self.validator(model=model)
             self.metrics.pop("fitness", None)
+            if RANK in {-1, 0}:
+                total_ms = sum(self.validator.speed.values())
+                if total_ms > 0:
+                    LOGGER.info(f"Total FPS: {1000 / total_ms:.2f}")
             self.run_callbacks("on_fit_epoch_end")
 
     def check_resume(self, overrides):
