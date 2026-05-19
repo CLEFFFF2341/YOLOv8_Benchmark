@@ -23,6 +23,7 @@ __all__ = (
     "Index",
     "LightConv",
     "RepConv",
+    "EMA",
     "SpatialAttention",
 )
 
@@ -611,6 +612,48 @@ class CBAM(nn.Module):
             (torch.Tensor): Attended output tensor.
         """
         return self.spatial_attention(self.channel_attention(x))
+
+
+class EMA(nn.Module):
+    """Efficient Multi-Scale Attention module."""
+
+    def __init__(self, c1: int, factor: int = 32):
+        """Initialize EMA attention.
+
+        Args:
+            c1 (int): Number of input channels.
+            factor (int): Maximum number of channel groups.
+        """
+        super().__init__()
+        groups = min(factor, c1)
+        while c1 % groups:
+            groups -= 1
+        self.groups = groups
+        c_ = c1 // groups
+        self.softmax = nn.Softmax(-1)
+        self.agp = nn.AdaptiveAvgPool2d((1, 1))
+        self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
+        self.pool_w = nn.AdaptiveAvgPool2d((1, None))
+        self.gn = nn.GroupNorm(c_, c_)
+        self.conv1x1 = nn.Conv2d(c_, c_, 1, 1, 0)
+        self.conv3x3 = nn.Conv2d(c_, c_, 3, 1, 1)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """Apply EMA attention to input features."""
+        b, c, h, w = x.size()
+        group_x = x.reshape(b * self.groups, c // self.groups, h, w)
+        x_h = self.pool_h(group_x)
+        x_w = self.pool_w(group_x).permute(0, 1, 3, 2)
+        hw = self.conv1x1(torch.cat([x_h, x_w], dim=2))
+        x_h, x_w = torch.split(hw, [h, w], dim=2)
+        x1 = self.gn(group_x * x_h.sigmoid() * x_w.permute(0, 1, 3, 2).sigmoid())
+        x2 = self.conv3x3(group_x)
+        x11 = self.softmax(self.agp(x1).reshape(b * self.groups, -1, 1).permute(0, 2, 1))
+        x12 = x2.reshape(b * self.groups, c // self.groups, -1)
+        x21 = self.softmax(self.agp(x2).reshape(b * self.groups, -1, 1).permute(0, 2, 1))
+        x22 = x1.reshape(b * self.groups, c // self.groups, -1)
+        weights = (torch.matmul(x11, x12) + torch.matmul(x21, x22)).reshape(b * self.groups, 1, h, w)
+        return (group_x * weights.sigmoid()).reshape(b, c, h, w)
 
 
 class Concat(nn.Module):
