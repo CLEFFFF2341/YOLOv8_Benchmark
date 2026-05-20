@@ -28,7 +28,6 @@ from ultralytics.nn.modules import (
     A2C2f,
     AConv,
     ADown,
-    BiFPN_Add2,
     Bottleneck,
     BottleneckCSP,
     C2f,
@@ -1696,12 +1695,6 @@ def parse_model(d, ch, verbose=True):
             else:
                 c2 = c1
                 args = [c1, c2, *args]
-        elif m is BiFPN_Add2:
-            c1 = [ch[x] for x in f]
-            c2 = args[0] if args else c1[0]
-            if c2 != c1[0]:
-                c2 = make_divisible(min(c2, max_channels) * width, 8)
-            args = [c1, c2, *args[1:]]
         elif m is AIFI:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):

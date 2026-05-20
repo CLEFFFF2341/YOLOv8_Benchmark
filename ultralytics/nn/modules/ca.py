@@ -1,10 +1,9 @@
 # Ultralytics AGPL-3.0 License - https://ultralytics.com/license
 
-"""Coordinate attention and lightweight BiFPN fusion modules."""
+"""Coordinate Attention module."""
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 from .conv import Conv
 
@@ -13,8 +12,7 @@ class CA(nn.Module):
     """Coordinate Attention block.
 
     This module keeps positional information by pooling separately along height
-    and width, then uses the resulting direction-aware attention maps to
-    recalibrate the input feature.
+    and width, then uses direction-aware attention maps to recalibrate features.
     """
 
     def __init__(self, c1, c2=None, reduction=32):
@@ -44,30 +42,3 @@ class CA(nn.Module):
         a_h = torch.sigmoid(self.conv_h(y_h))
         a_w = torch.sigmoid(self.conv_w(y_w))
         return x * a_h * a_w
-
-
-class BiFPN_Add2(nn.Module):
-    """Weighted two-input BiFPN fusion with channel alignment."""
-
-    def __init__(self, c1, c2=None, eps=1e-4):
-        super().__init__()
-        if not isinstance(c1, (list, tuple)) or len(c1) != 2:
-            raise ValueError("BiFPN_Add2 expects exactly two input channel values.")
-
-        c2 = c1[0] if c2 is None else c2
-        self.eps = eps
-        self.w = nn.Parameter(torch.ones(2, dtype=torch.float32), requires_grad=True)
-        self.align0 = Conv(c1[0], c2, 1, 1) if c1[0] != c2 else nn.Identity()
-        self.align1 = Conv(c1[1], c2, 1, 1) if c1[1] != c2 else nn.Identity()
-        self.out = Conv(c2, c2, 3, 1)
-
-    def forward(self, x):
-        x0, x1 = x
-        x0 = self.align0(x0)
-        x1 = self.align1(x1)
-        if x1.shape[-2:] != x0.shape[-2:]:
-            x1 = F.interpolate(x1, size=x0.shape[-2:], mode="nearest")
-
-        w = F.relu(self.w)
-        w = w / (w.sum() + self.eps)
-        return self.out(w[0] * x0 + w[1] * x1)

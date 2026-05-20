@@ -76,7 +76,7 @@ from .conv import (
     RepConv,
     SpatialAttention,
 )
-from .ca_bifpn import BiFPN_Add2, CA
+from .ca import CA
 from .head import (
     OBB,
     OBB26,
@@ -109,7 +109,6 @@ from .transformer import (
 
 __all__ = (
     "AIFI",
-    "BiFPN_Add2",
     "C1",
     "C2",
     "C2PSA",
