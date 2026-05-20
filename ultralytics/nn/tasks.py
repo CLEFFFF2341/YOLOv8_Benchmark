@@ -28,6 +28,7 @@ from ultralytics.nn.modules import (
     A2C2f,
     AConv,
     ADown,
+    BiFPN_Add2,
     Bottleneck,
     BottleneckCSP,
     C2f,
@@ -37,6 +38,7 @@ from ultralytics.nn.modules import (
     C3Ghost,
     C3k2,
     C3x,
+    CA,
     CBFuse,
     CBLinear,
     Classify,
@@ -1686,6 +1688,20 @@ def parse_model(d, ch, verbose=True):
                     args.extend((True, 1.2))
             if m is C2fCIB:
                 legacy = False
+        elif m is CA:
+            c1 = ch[f]
+            if args and isinstance(args[0], int):
+                c2 = args[0] if args[0] == c1 else make_divisible(min(args[0], max_channels) * width, 8)
+                args = [c1, c2, *args[1:]]
+            else:
+                c2 = c1
+                args = [c1, c2, *args]
+        elif m is BiFPN_Add2:
+            c1 = [ch[x] for x in f]
+            c2 = args[0] if args else c1[0]
+            if c2 != c1[0]:
+                c2 = make_divisible(min(c2, max_channels) * width, 8)
+            args = [c1, c2, *args[1:]]
         elif m is AIFI:
             args = [ch[f], *args]
         elif m in frozenset({HGStem, HGBlock}):
